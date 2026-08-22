@@ -1,3 +1,6 @@
+# Импорт библиотек
+
+# Втроенные библиотеки
 from pathlib import Path
 import requests
 import time
@@ -5,25 +8,32 @@ import hashlib
 import tarfile
 import io
 
+# Сторонние библиотеки
 import json5
+
+
+# Определяем пути
 
 SCRIPT_FILE = Path(__file__).resolve()
 SCRIPT_DIR = SCRIPT_FILE.parent
 
+# Директория пользовательских данных
 DATA_DIR = Path(str(SCRIPT_DIR) + "/data")
 if not DATA_DIR.is_dir():
 	DATA_DIR.mkdir()
 
+# Директория логов
 LOGS_DIR = Path(str(DATA_DIR) + "/logs")
 if not LOGS_DIR.is_dir():
 	LOGS_DIR.mkdir()
 
-SETTINGS_PATH = Path(str(DATA_DIR) + "/settings.json5")
-LAST_UPDATE_DATA__PATH = Path(str(DATA_DIR) + "/.lastUpdData")
+SETTINGS_PATH = Path(str(DATA_DIR) + "/settings.json5") # Путь к настройкам
+LAST_UPDATE_DATA__PATH = Path(str(DATA_DIR) + "/.lastUpdData") # Путь к дате последнего обновления
 
+# Работа с пользовательскими данными
 class data:
 	@staticmethod
-	def get_settings():
+	def get_settings(): # Получение настроек
 		if SETTINGS_PATH.is_file():
 			with SETTINGS_PATH.open('r', encoding='utf-8') as settings_file:
 				settings = json5.parse(settings_file.read())[0]
@@ -59,7 +69,7 @@ class data:
 		return settings
 	
 	@staticmethod
-	def get_lastUpdateData():
+	def get_lastUpdateData(): # Получение даты последнего обновления
 		lastUpdateData = {}
 		if LAST_UPDATE_DATA__PATH.is_file():
 			with LAST_UPDATE_DATA__PATH.open('rb') as lastUpdateData_file:
@@ -76,7 +86,7 @@ class data:
 		return lastUpdateData
 	
 	@staticmethod
-	def update_lastUpdateData(hash: bytes, time: bytes | int):
+	def update_lastUpdateData(hash: bytes, time: bytes | int): # Обновление даты последнего обновления
 		if len(hash) != 32:
 			raise ValueError
 		
@@ -89,9 +99,10 @@ class data:
 		with LAST_UPDATE_DATA__PATH.open('wb') as lastUpdateData_file:
 			lastUpdateData_file.write(hash + time)
 
+# Работа с Telegram API
 class TelegramAPI:
 	@staticmethod
-	def sendMessage(token, chatId, text, proxy: dict):
+	def sendMessage(token, chatId, text, proxy: dict): # Отправка сообщения
 		url = f"https://api.telegram.org/bot{token}/sendMessage"
 		for _ in range(3):
 			success = False
@@ -108,10 +119,13 @@ class TelegramAPI:
 		if not success:
 			raise Exception
 
+# Работа с логами
 class logger:
 	def __init__(self, log_level: int = 1, log_file_path: Path | str = "default"):
+		# Уровень логирования
 		self.log_level = log_level
 		
+		# Путь к логу
 		if isinstance(log_file_path, str):
 			if log_file_path == "default":
 				self.log_file_type = "default"
@@ -124,6 +138,7 @@ class logger:
 		
 		self.log_file_path = Path(log_file_path)
 	
+	# Уровни логирования
 	log_levels = [
 		"DEBUG",
 		"INFO",
@@ -131,12 +146,12 @@ class logger:
 		"ERROR",
 	]
 	
-	def __write_to_log(self, data: str):
+	def __write_to_log(self, data: str): # Запись в лог
 		with self.log_file_path.open('a', encoding='utf-8') as log_file:
 			log_file.write(data + '\n')
 		
 	
-	def new(self, log_level: int = 0, text: str = "", save_to_file: bool = True):
+	def new(self, log_level: int = 0, text: str = "", save_to_file: bool = True): # Новое событие
 		if log_level >= self.log_level:
 			level_str = self.log_levels[log_level].upper()
 			log_txt = f"[{time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())}] [{level_str}] {text}"
@@ -147,36 +162,39 @@ class logger:
 				self.__write_to_log(log_txt)
 	
 	@staticmethod
-	def __get_file_size_and_source(file_path: Path | str):
+	def __get_file_size_and_source(file_path: Path | str): # Получение содержимого и размера файла
 		with open(Path(file_path), 'rb') as file:
-			source = file.read()
-			size = len(source)
+			source = file.read() # Содержимое лога
+			size = len(source) # Размер лога
 		
 		return size, source
 	
-	def archivate_log(self):
-		log_size, log = self.__get_file_size_and_source(self.log_file_path)
-		last_name = self.log_file_path.name
+	def archivate_log(self): # Архивирование лога
+		log_size, log = self.__get_file_size_and_source(self.log_file_path) # Получение содержимого лога и размера лога
+		last_name = self.log_file_path.name # Получение имени лога
 		
+		# Создание сжатого архива
 		archive = io.BytesIO()
 		with tarfile.open(fileobj=archive, mode='w:gz') as tar:
 			metaOfLog = tarfile.TarInfo(name=last_name)
 			metaOfLog.size = log_size
 			tar.addfile(tarinfo=metaOfLog, fileobj=io.BytesIO(log))
 		
+		# Запись архива
 		archive_bytes = archive.getvalue()
 		if len(archive_bytes) > log_size:
-			self.log_file_path.rename(str(self.log_file_path) + " (Archived)")
+			self.log_file_path.rename(str(self.log_file_path) + " (Archived)") # Изменение имени лога на имя + (Archived)
 		else:
+			# Запись сжатого архива на диск
 			new_path = Path(str(self.log_file_path) + " (Archived).tar.gz")
 			with open(new_path, 'wb') as archive_log_file:
 				archive_log_file.write(archive_bytes)
 			
-			self.log_file_path.unlink()
+			self.log_file_path.unlink() # Удаление старого файла лога
 	
-	def cheak_logFilePath(self):
+	def cheak_logFilePath(self): # Проверка нужно ли архивировать лог, и в случае чего архивирование лога
 		if self.log_file_type == "default":
-			estimated_log_file_path = Path(str(LOGS_DIR)+'/'+time.strftime("%Y-%m-%d", time.localtime()))
+			estimated_log_file_path = Path(str(LOGS_DIR)+'/'+time.strftime("%Y-%m-%d", time.localtime())) # Получение предпологаемого имени лога
 			if self.log_file_path != estimated_log_file_path:
 				if self.log_file_path.is_file():
 					self.__write_to_log("\nEnd of log")
@@ -185,13 +203,13 @@ class logger:
 				self.log_file_path = estimated_log_file_path
 
 def main():
-	settings = data.get_settings()
+	settings = data.get_settings() # Получение настроек
 	settings['updateTimeInSeconds'] = settings['updateTime']
 	settings['updateTime'] = settings['updateTime'] * 1000000
 	
-	main_logger = logger(settings['log_level'])
+	main_logger = logger(settings['log_level']) # Создание объекта для логирования
 	
-	def cycle(url, proxy: dict = {"enabled": False, "url": None}, loggerForFunc=main_logger):
+	def cycle(url, proxy: dict = {"enabled": False, "url": None}, loggerForFunc=main_logger): # Цикл получения хеша
 		success = False
 		for _ in range(3):
 			try:
@@ -209,7 +227,7 @@ def main():
 		
 		if response:
 			content = response.content
-			if loggerForFunc.log_level == 0:
+			if loggerForFunc.log_level == 0: # DEBUG данные
 				response_weight = len(content)
 				response_time = response.elapsed.total_seconds()
 				speed = response_weight / response_time
@@ -227,7 +245,7 @@ def main():
 			else:
 				raise Exception
 	
-	def parse_proxySettings(nameOfEnabledKey: str, proxySettings=settings['proxy'], loggerForFunc=main_logger):
+	def parse_proxySettings(nameOfEnabledKey: str, proxySettings=settings['proxy'], loggerForFunc=main_logger): # Парсирование настроек прокси
 		if isinstance(proxySettings, dict):
 			proxy = {}
 			try:
@@ -263,16 +281,19 @@ Logging level: {main_logger.log_levels[main_logger.log_level].upper()}
 		if lastUpdateData.get('success'):
 			elpased_time = time.time_ns() - lastUpdateData['time']
 			if elpased_time >= settings['updateTime']:
+				# Получение хеша
 				success = False
 				try:
 					hash = cycle(settings['url'], parse_proxySettings("enabled_for_webStorage"))
 					success = True
 				except Exception:
 					main_logger.new(3, "An error occurred while retrieving the resource hash.")
+				
 				if success:
 					if hash != lastUpdateData['hash']:
 						main_logger.new(1, f"Data has been update! URL: {settings['url']}")
 						
+						# Telegram
 						TGbot = settings.get('TGbot')
 						if TGbot:
 							if TGbot.get('enabled'):
@@ -304,15 +325,18 @@ Logging level: {main_logger.log_levels[main_logger.log_level].upper()}
 					else:
 						main_logger.new(1, "The data hasn`t been updated", False)
 				else:
+					# Если произошла ошибка получения хеша
 					data.update_lastUpdateData(lastUpdateData['hash'], time.time_ns())
 					main_logger.new(2, "The cycle has been skipped.")
 			else:
 				try:
-					time.sleep((settings['updateTime'] - elpased_time) // 1000000 + 1)
+					time.sleep((settings['updateTime'] - elpased_time) // 1000000 + 1) # Time sleep до момента нового цикла
 				except KeyboardInterrupt:
+					# Если пользователь завершил задачу через Ctrl+C
 					main_logger.new(1, "The user caused the stop", False)
 					exit()
 		else:
+			# Создание данных
 			cycle(settings['url'])
 			main_logger.new(1, "The data has been created")
 
